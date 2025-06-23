@@ -58,44 +58,70 @@ Tunnel Extensible Authentication Protocol (TEAP) version 1 was first
 defined in {{?RFC7170}}.  However, implementations of that
 specification were found to have limited interoperability, due to the
 complexity and under-specification of the cryptographic key
-deriviations defined there.
+deriviations that it defined.
 
-TEAPv1 was updated and clarified in {{I-D.ietf-emu-rfc7170bis}}.
-That document defined a large amount of functionality in the protocol,
-but also noted in (TBD) that only a small subset of that functionality
-was interoperable.  In addition, the interoperable parts of the
-protocol security issues which could allow on-path attackers
-essentially unlimited control over the data being transported inside
-of the TLS tunnel.
+TEAPv1 was updated and clarified in {{I-D.ietf-emu-rfc7170bis}}.  That
+document described a large amount of potential functionality in the
+protocol, but also noted in {{I-D.ietf-emu-rfc7170bis, Section 5.1}}
+that only a small subset of that functionality was interoperable.  In
+addition, the interoperable parts of the protocol security issues
+which could allow on-path attackers essentially unlimited control over
+the data being transported inside of the TLS tunnel.
 
 We do not review the full security issues with TEAPv1 here.  Instead,
 we define new and simpler cryptographic key deriviations.  These
 derivations address all of the known issues with TEAPv1.
 
+## Changes from TEAPv1
+
+Most aspects of TEAPv1 are unchanged.  The message and TLV formats are
+the same, as are the derivations for the session_key_seed
+({{I-D.ietf-emu-rfc7170bis, Section 6.1}}), along with the Master
+Session Key (MSK) and Extended Master Session Key (EMSK)
+({{I-D.ietf-emu-rfc7170bis, Section 6.4}}).
+
+The Crypto-Binding TLV {{I-D.ietf-emu-rfc7170bis, Section 4.2.13}}
+format is also the same as for TEAPv1, even though the cryptographic
+derivation has changed.
+
+The main difference between TEAPv1 and TEAPv2 is in the cryptographic
+calculations.  The changes for TEAPv2 address a number of issues in
+TEAPv1:
+
+* each inner exchange is bound to the TLS tunnel.
+
+* Where an inner exchange in TEAPv2 usd an MSK of all zeros, TEAPv2
+  defines a pseudo MSK which is derived from the data being exchanged.
+
+* each inner exchange includes a Crypto-Binding TLV.
+
+* inner exchanges which use a challenge (e.g. EAP-MSCHAPv2 {{KAMATH}})
+  derive that challenge from the TLS parameters.
+
+* The cryptographic key derivations have been substantially
+  simplified.
+
+The result is a protocol which is simpler and is more extensible.
+
 # Negotiation
 
-TBD: repeat the text in {{I-D.ietf-emu-rfc7170bis}} about version
-negotiation.
+TEAPv2 uses the same version negotiation method as is defined in
+{{I-D.ietf-emu-rfc7170bis, Section 3.1}}, with the Version field set
+to two (2) for TEAPv2.
 
-TEAPv2 MUST be used with TLS 1.3 or later.
+TEAPv2 MUST use TLS 1.3 or later.
 
 # Cryptographic Calculations
 
-The cryptographic calculations for TEAPv2 address a number of issues
-in TEAPv1:
-
-* all inner exchanges are bound to the TLS tunnel
-
-* all inner exchanges include a Crypto-Binding TLV
-
-* inner exchanges which use a challenge (e.g. EAP-MSCHAPv2 {{KAMATH}})
-  derive that challenge from the TLS parameters
-
-* The cryptrographic deriviations have been substantially simplified
+The crytographic calculations for TEAPv2 have been substantially
+simplified from those defined in {{I-D.ietf-emu-rfc7170bis, Section
+6}}.
 
 ## TEAP Authentication Phase 1: Key Derivations {#key-derivations}
 
-The session key seed is the same as for TEAPv1 (TBD)
+The session key seed is the same as defined in
+{{I-D.ietf-emu-rfc7170bis, Section 6.2.1}} for TEAPv2.  That
+definition is reproduced here verbatim:
 
 ~~~~
    session_key_seed = TLS-Exporter(
@@ -108,32 +134,33 @@ Instead of using a complex key deriviation method as was done with
 TEAPv1, TEAPv2 uses a much simpler method to derive the keys.  This
 method is split into a few steps:
 
-* define a seed which combines data from the current inner message,
+* define a seed which combines data from the current inner message
   along with data from the previous round.
 
-* Call the TLS-Exporter() function with the seed in order to derive
-  keying data.
+* Call the TLS-Exporter() function ({{RFC8446, Section 7.5}}) with the
+  above seed as the "context_value", in order to derive keying data.
 
 * Split the resulting keying data into subkeys, which are each used
   for different purposes.
 
-Unlike TEAPv1, TEAPv2 mixes data from each inner message, and not from
-each inner authentication method.  Some inner authentication methods
-do not derive keys (e.g. Basic-Password-Req TLV and
-Basic-Password-Resp TLV).  Other inner message exchanges such as the
-CSR-Attributes TLV, PKCS#7 TLV, or PKCS#10 TLV also do not derive
-keys.
+TEAPv1 mixed data from each inner authentication message into
+the key derivation, TEAPv2 mixes data from each inner message.  Some
+inner authentication methods do not derive keys
+(e.g. Basic-Password-Req TLV and Basic-Password-Resp TLV).  Other
+inner message exchanges such as the CSR-Attributes TLV, PKCS#7 TLV, or
+PKCS#10 TLV also do not derive keys.
 
 Where TEAPv1 uses a Master Session Key (MSK) of all zeros for those
-inner messages, TEAPv2 defines a pseudo MSK which is tied to the TLS
-tunnel, and is derived from the data being exchanged.  This pseudo MSK
-is then used in the cryptographic calculations, as with the MSK from
-an inner method.
+inner messages which did not define an MSK, TEAPv2 defines a pseudo
+MSK which is tied to the TLS tunnel.  The pseduo MSK is derived from
+the data being exchanged, which should better protect the data from
+on-path attackers.  This pseudo MSK is then used in the cryptographic
+calculations.
 
-The keys for each inner message are then mixed with a seed from
-previous rounds beginning with the TEAP Phase 2 session_key_seed
-derived above, to yield a for set of keys for this round.  The seed
-from the final round is then used to derive the MSK and EMSK for TEAP.
+The MSK and/or EMSK for each inner message are mixed with a seed from
+previous rounds beginning with the TEAP Phase 2 session_key_seed, to
+yield a new set of keys for this round.  The seed from the final round
+is then used to derive the MSK and EMSK for TEAP.
 
 ### Key Seeding
 
@@ -158,8 +185,9 @@ PrevRoundKey
 >
 > For the first round, this field is taken from the session_key_seed.
 >
-> For subsequent rounds, this field is set to the RoundKey which is
-> part of the DerivedKey structure, as defined in the next section.
+> For subsequent rounds, this field is the previous rounds RoundKey
+> field, which is taken from the DerivedKey structure defined in the
+> next section.
 
 MSK
 
@@ -175,9 +203,6 @@ MSK
 > authentication method does not derive an MSK or an EMSK, then a
 > pseudo MSK is derived instead.  See (TBD) below for dicussion and
 > definition of the pseudo MSK.
->
-> This deriviation means that unlike TEAPv1, the MSK field is never
-> zero, even for inner methods which do not derive an MSK.
 
 EMSK
 
@@ -190,17 +215,18 @@ EMSK
 > initialized to all zeros.
 
 An inner message MUST derive either an MSK (including a pseudo MSK),
-or an EMSK, or both.  The RoundSeed structure MUST NOT have both the
-MSK and EMSK fields be all zeros.
+or an EMSK, or both.  The RoundSeed structure MUST NOT have both of
+the MSK and EMSK fields be all zeros.
 
 ### Key Derivation
 
-Each round produces a DerivedKey, which is derived from the RoundSeed
-for the this round via the following calculation.
+Each round produces a DerivedKey, which is depends on the RoundSeed
+for this round via the following calculation.
 
 ~~~~
-   DerivedKey = TLS-Exporter(RoundSeed,
-                "EXPORTER: TEAPv2 Inner Methods Compound Keys", 104)
+   DerivedKey = TLS-Exporter(
+                "EXPORTER: TEAPv2 Inner Methods Compound Keys",
+                RoundSeed, 104)
 ~~~~
 
 The DerivedKey is 104 octets in length, and assigned to the following
@@ -241,6 +267,12 @@ Challenge
 > If the inner method does not use a challenge, then the Challenge
 > field is ignored.
 
+TBD: this derivation should be from each message, NOT from each side.
+That is, instead of each party keeping track of "ours" and "theirs"
+key data, there should only be one set of data "session".  The party
+which sends the first inner message is the one which is bootstraps
+this process.  Each inner exchange then updates RoundKey.
+
 ## Methods which do not generate MSK or EMSK
 
 Where an inner message does not generate MSK (Basic-Password-Resp TLV
@@ -248,20 +280,22 @@ or PKCS#7 TLV), then a pseudo MSK is calculated which is derived from
 the inner data.  This pseudo MSK ensures that the data from each
 message is mixed in with the data from previous exchanges.  This
 mixing cryptographically binds every inner message to the protected
-tunnel (not just inner authentications), and binds each message to the
-previous one.  This cryptographic binding prevents on-path attacks.
+tunnel (not just inner authentication messages), and binds each
+message to the previous one.  This cryptographic binding prevents
+on-path attacks.
 
-In contrast, TEAPv1 just sets the MSK to zero for these TLVs, which
-does not tie the data to the TLS session, or prevent on-path
-attackers.
+In contrast, TEAPv1 sets the MSK to zero for these TLVs, which does
+not tie the data to the TLS session, or prevent on-path attackers.
 
 ~~~~
-  MSK = TLS-Exporter(data,
-        "EXPORTER: TEAPv2 Inner Method MSK", data_len)
+  MSK = TLS-Exporter("EXPORTER: TEAPv2 Pseudo MSK",
+                     data, 32)
 ~~~~
 
 Where "data" is the contents of the TLV.  That is, everything encoded
-in the TLV after the four octet TLV header.
+in the TLV after the four octet TLV header.  The following list shows
+the TLVs which are used in inner message exchanges, and the contents
+which are used as the "data" fefined above.
 
 * Basic-Password-Req TLV: Value
 
@@ -279,9 +313,10 @@ defined in (TBD), below.
 
 This explicit signal makes implementations easier, because otherwise
 each non-authentication exchange would require special-purpose code to
-process it.  It also makes future extensions easier, as any additional
-non-authentiction exchanges do can simply be listed in the
-Pseudo-MSK-Contents TLV, and do not need special-purpose code.
+process the TLVs being sent.  It also makes future extensions easier,
+as any future non-authentication exchanges can simply be listed in the
+Pseudo-MSK-Contents TLV, and do not need special-purpose code to
+process.
 
 ## Computing the Compound-MAC {#computing-compound-mac}
 
@@ -293,7 +328,8 @@ the same as with TEAPv1:
 ~~~~
 
 Where CMK is the Compound MAC key derived above for this round, and
-the definition of BUFFER is the same as with TEAPv1 (TBD).
+the definition of BUFFER is the same as in {{I-D.ietf-emu-rfc7170bis,
+Section 6.3}} for TEAPv1.
 
 ## EAP Master Session Key Generation
 
@@ -310,7 +346,7 @@ derivation:
 ~~~
 
 The value for RoundSeed MUST use the PrevRoundSeed from the previous
-round, and the MSK and the EMSK from the final inner message.
+round, along with the MSK and the EMSK from the final inner message.
 
 ## Operation across Multiple Rounds
 
@@ -326,21 +362,25 @@ TBD: discuss why use of MSK only in TEAPv1 is likely to avoid
 cryptographic binding?  The session_key_seed is taken from the
 TLS-Exporter(), which binds it to the tunnel.  But subsequent
 exchanges of MSK-only methods do not bind the results to the tunnel.
+This may or may not be a problem?
 
 ## TEAPv2 Message Format
 
-The TEAPv2 message format is identical to that of (TBD), with only one
-change: the Ver field is set to "2", to indicate that this is TEAPv2.
+The TEAPv2 message format is identical to that of TEAPv1
+({{I-D.ietf-emu-rfc7170bis, Section 4.1}}) with only one change: the
+Ver field is set to "2", to indicate that this is TEAPv2.
 
 ## TEAPv2 TLVs
 
-The TEAPv2 TLV definitions are identical to that for TEAPv1, with only
-the changes and additions noted below.
+The TEAPv2 TLV format and TLV definitions are identical to that for
+TEAPv1 ({{I-D.ietf-emu-rfc7170bis, Section 4.2}}), with only the
+changes and additions noted below.
 
 ### Crypto-Binding TLV
 
-The definition of the TEAPv2 Crypto-Binding TLV is the same as for
-TEAPv1 (TBD), with the following changes:
+The format of the TEAPv2 Crypto-Binding TLV is the same as for TEAPv1
+({{I-D.ietf-emu-rfc7170bis, Section 4.2.13}}), with the following
+changes:
 
 * The Version field MUST set to two (2).
 
@@ -361,11 +401,13 @@ TEAPv1 (TBD), with the following changes:
 Note that unlike TEAPv1, only one CMK is derived for each inner
 message, which also means that only one Compound-MAC is derived.  This
 Compound-MAC is placed into the MSK Compound-MAC field, and the EMSK
-Compound-MAC field is not used.  The alternative would be to redefine
-the entire contents of the Crypto-Binding TLV.  Re-using the existing
-Crypto-Binding TLV format means that there are minimal changes
-required to implementations, which is a more useful property than any
-trivial optimization to save a few octets of data being exchanged.
+Compound-MAC field is not used.
+
+It would be possible to redefine the entire contents of the
+Crypto-Binding TLV, in the interest of minor optimization.  However,
+re-using the existing Crypto-Binding TLV format means that there are
+minimal changes required to implementations, which is a more useful
+property than saving a few octets of data being exchanged.
 
 ### Pseudo-MSK-Contents TLV
 
@@ -376,10 +418,22 @@ calculate the pseudo MAC.
 The Pseudo-MSK-Contents TLV MUST be included in any message where no
 authentication is taking place.  The Pseudo-MSK-Contents TLV MUST be
 included in any message where the inner authentication method does not
-derive either an MSK or an EMSK.
+derive either an MSK or an EMSK.  Where a party expects a
+Pseudo-MSK-Contents TLV but does not receive it, then the peer or EAP
+server MUST treat this as a fatal error of 2010 (Missing
+Pseudo-MSK-Contents TLV).
 
-The Pseudo-MSK-Contents TLV MUST NOT be included in any message where the
-inner authentication method derives either an MSK or an EMSK.
+The Pseudo-MSK-Contents TLV MUST NOT be included in any message where
+the inner authentication method derives either an MSK or an EMSK.
+Where a party receives an unexpected Pseudo-MSK-Contents TLV, then the
+peer or EAP server MUST treat this as a fatal error of 2002
+(Unexpected TLVs Exchanged).
+
+Where there is a fatal error due to a problem with the
+Pseudo-MSK-Contents TLV, the party MUST send a NAK TLV which includes
+a reference to the Pseudo-MSK-Contents TLV.
+
+TBD: Do we want to add a Vendor-Id as is done with the NAK TLV?
 
 ~~~~
  0                   1                   2                   3
@@ -406,8 +460,11 @@ TLV Type
 Length
 
 > The Length field is two octets and contains the length of the TLV
-> field in octets.  The Length MUST be at least two (2), and MUST a
+> field in octets.  The Length MUST be at least two (2), and MUST be a
 > multiple of two (2).
+>
+> If the Length field is invalid, implementations MUST behave as if
+> Pseudo-MSK-Contents TLV was missing.
 
 Type Reference
 
@@ -423,6 +480,8 @@ TBD EAP-MSCHAPv2
 
 # IANA Considerations
 
-TBD - assing new Pseduo-MSK-Contents TLV
+TBD - assign new Pseduo-MSK-Contents TLV
+
+TBD - assign Error 2010 (Missing Pseudo-MSK-Contents TLV)
 
 --- back
